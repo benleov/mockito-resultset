@@ -18,6 +18,10 @@ public class MockitoResultSetTest {
 
         ResultSet resultSet = builder.withPath("src/test/resources/test.csv").build();
 
+        while(resultSet.next()) {
+            System.out.println("RESULT: " + resultSet.getString(2));
+        }
+
         // TODO: assert results are correct
 
     }
