@@ -19,7 +19,8 @@ public class MockitoResultSetTest {
         ResultSet resultSet = builder.withPath("src/test/resources/test.csv").build();
 
         while(resultSet.next()) {
-            System.out.println("RESULT: " + resultSet.getString(2));
+            System.out.println("RESULT: " + resultSet.getInt("id"));
+            System.out.println("RESULT: " + resultSet.getString("id"));
         }
 
         // TODO: assert results are correct

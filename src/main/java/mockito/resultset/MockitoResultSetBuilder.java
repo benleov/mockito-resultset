@@ -10,10 +10,14 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.sql.*;
+import java.sql.JDBCType;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -79,10 +83,17 @@ public class MockitoResultSetBuilder {
 
             int currentRow = -1;
             int totalRows;
+
             List<List<String>> data = new ArrayList<>();
 
-            public String getCurrentValue(int column) {
-                return data.get(currentRow).get(column);
+            List<String> columnNames = new ArrayList<>();
+
+            public String getCurrentValue(int columnNumber) {
+                return data.get(currentRow).get(columnNumber);
+            }
+
+            public String getCurrentValue(String columnName) {
+                return data.get(currentRow).get(columnNames.indexOf(columnName));
             }
 
         }
@@ -133,6 +144,7 @@ public class MockitoResultSetBuilder {
                 when(metaData.getColumnType(1)).thenReturn(columnType.getVendorTypeNumber());
                 headerIndex++;
                 columnTypes.add(columnType);
+                state.columnNames.add(columnName);
             }
 
             int rowIndex = 0;
@@ -140,13 +152,11 @@ public class MockitoResultSetBuilder {
             csvReader = new CsvReader();
             csvReader.setContainsHeader(true);
 
-            try (CsvParser csvParser2 = csvReader.parse(new FileReader(path))){
+            try (CsvParser csvParser2 = csvReader.parse(new FileReader(path))) {
                 csvParser2.nextRow();    // read off headers
                 csvParser.getHeader();
 
                 while ((row = csvParser2.nextRow()) != null) {
-
-                    //List<String> rowData = new ArrayList<>();
 
                     for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
 
@@ -154,8 +164,31 @@ public class MockitoResultSetBuilder {
                         String columnValue = row.getField(columnIndex);
                         JDBCType columnType = columnTypes.get(columnIndex);
 
-                        // rowData.add(columnValue);
                         // https://db.apache.org/ojb/docu/guides/jdbc-types.html#Mapping+of+JDBC+Types+to+Java+Types
+
+                        // get string can be called for all column types
+
+                        when(resultSet.getString(any(Integer.class))).thenAnswer(invocation -> {
+
+                            int columnNumber = invocation.getArgument(0);
+
+                            if (columnNumber > 0) {
+                                return state.getCurrentValue(columnNumber - 1);
+                            } else {
+                                return "";
+                            }
+                        });
+
+                        when(resultSet.getString(any(String.class))).thenAnswer(invocation -> {
+
+                            String columnName1 = invocation.getArgument(0);
+
+                            if (columnName1 != null) {
+                                return state.getCurrentValue(columnName1);
+                            } else {
+                                return "";
+                            }
+                        });
 
                         switch (columnType) {
                             case TINYINT:
@@ -172,12 +205,30 @@ public class MockitoResultSetBuilder {
                                 }
                                 break;
                             case INTEGER:
-                                try {
-                                    int integerValue = Integer.valueOf(columnValue);
-                                    when(resultSet.getInt(headers.get(columnIndex))).thenReturn(integerValue);
-                                    when(resultSet.getInt(columnName)).thenReturn(integerValue);
-                                } catch (NumberFormatException e) {
-                                }
+
+                                when(resultSet.getInt(any(Integer.class))).thenAnswer(invocation -> {
+
+                                    int columnNumber = invocation.getArgument(0);
+
+                                    if (columnNumber > 0) {
+                                        return Integer.parseInt(state.getCurrentValue(columnNumber - 1));
+                                    } else {
+                                        return 0;
+                                    }
+                                });
+
+                                when(resultSet.getInt(any(String.class))).thenAnswer(invocation -> {
+
+                                    String columnName1 = invocation.getArgument(0);
+
+                                    if (columnName1 != null) {
+                                        return Integer.parseInt(state.getCurrentValue(columnName1));
+                                    } else {
+                                        return 0;
+                                    }
+                                });
+
+
                                 break;
                             case BIGINT:
                                 try {
@@ -219,23 +270,9 @@ public class MockitoResultSetBuilder {
                             case LONGNVARCHAR:
                             case VARCHAR:
                             case LONGVARCHAR:
-                                //when(resultSet.getString(headers.get(columnIndex))).thenReturn(columnValue);
-                               // when(resultSet.getString(columnName)).thenReturn(columnValue);
-                                when(resultSet.getString(any(Integer.class))).thenAnswer(new Answer<String>() {
 
-                                    @Override
-                                    public String answer(InvocationOnMock invocation) throws Throwable {
+                                // these can all be retrieved via getString
 
-                                        int columnNumber = invocation.getArgument(0);
-
-                                        if(columnNumber > 0) {
-                                            return state.getCurrentValue(columnNumber - 1);
-                                        } else {
-                                            return "";
-                                        }
-
-                                    }
-                                });
                                 break;
                             case DATE:
                                 when(resultSet.getDate(headers.get(columnIndex))).thenReturn(null);
